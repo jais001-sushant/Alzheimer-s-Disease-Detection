@@ -19,14 +19,18 @@ import tempfile
 
 print("TensorFlow version:", tf.__version__)
 
+# =============================================================================
+# CONFIGURATION — change dataset path here
+# =============================================================================
+
 BASE_DATA_DIR = os.getenv("DATASET_PATH", "/Users/smilodon002/Downloads/Alzheimer_Dataset/AugmentedAlzheimerDataset")
 MODEL_SAVE_PATH = "model/alzheimer_model.h5"
 RESULTS_DIR = "results"
 
-IMG_SIZE = (224, 224)
+IMG_SIZE = (224, 224)  # EfficientNetB0 needs 224x224
 BATCH_SIZE = 32
 EPOCHS = 30
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.0001  # Lower LR for transfer learning
 
 CLASS_NAMES = ['MildDemented', 'ModerateDemented', 'NonDemented', 'VeryMildDemented']
 
@@ -37,6 +41,9 @@ print("Configuration ready!")
 print(f"Dataset path: {BASE_DATA_DIR}")
 print(f"Image size: {IMG_SIZE}")
 
+# =============================================================================
+# DATASET EXPLORATION
+# =============================================================================
 
 def explore_dataset(data_dir):
     print("\nEXPLORING DATASET...")
@@ -85,6 +92,9 @@ success, class_counts = explore_dataset(BASE_DATA_DIR)
 if not success:
     exit()
 
+# =============================================================================
+# DATA SPLITTING — 70 / 15 / 15
+# =============================================================================
 
 def create_data_split(data_dir):
     print("\nCreating 70-15-15 split...")
@@ -122,6 +132,9 @@ def create_data_split(data_dir):
 
 TRAIN_DIR, VAL_DIR, TEST_DIR = create_data_split(BASE_DATA_DIR)
 
+# =============================================================================
+# DATA GENERATORS
+# =============================================================================
 
 print("\nSetting up data generators...")
 
@@ -156,6 +169,9 @@ print(f"Training samples:   {train_generator.samples}")
 print(f"Validation samples: {val_generator.samples}")
 print(f"Test samples:       {test_generator.samples}")
 
+# =============================================================================
+# CLASS WEIGHTS
+# =============================================================================
 
 class_weights = compute_class_weight(
     'balanced',
@@ -167,6 +183,9 @@ print("\nClass weights:")
 for i, name in enumerate(CLASS_NAMES):
     print(f"  {name}: {class_weights[i]:.4f}")
 
+# =============================================================================
+# MODEL — EfficientNetB0 Transfer Learning
+# =============================================================================
 
 print("\nBuilding EfficientNetB0 model...")
 
@@ -205,6 +224,9 @@ model, base_model = build_efficientnet_model()
 print("EfficientNetB0 model built!")
 print(f"Total parameters: {model.count_params():,}")
 
+# =============================================================================
+# CALLBACKS
+# =============================================================================
 
 callbacks = [
     EarlyStopping(
@@ -228,6 +250,9 @@ callbacks = [
     )
 ]
 
+# =============================================================================
+# PHASE 1 TRAINING — Train classifier only (frozen base)
+# =============================================================================
 
 print("\n" + "="*60)
 print("PHASE 1: Training classifier head (base frozen)")
@@ -247,6 +272,9 @@ print("Phase 1 complete!")
 phase1_best_val = max(history_phase1.history['val_accuracy'])
 print(f"Best validation accuracy (Phase 1): {phase1_best_val:.4f}")
 
+# =============================================================================
+# PHASE 2 TRAINING — Fine-tune top layers of base model
+# =============================================================================
 
 print("\n" + "="*60)
 print("PHASE 2: Fine-tuning top layers of EfficientNetB0")
@@ -300,6 +328,9 @@ print("Phase 2 complete!")
 phase2_best_val = max(history_phase2.history['val_accuracy'])
 print(f"Best validation accuracy (Phase 2): {phase2_best_val:.4f}")
 
+# =============================================================================
+# COMBINE HISTORY
+# =============================================================================
 
 combined_history = {
     'accuracy':     history_phase1.history['accuracy']     + history_phase2.history['accuracy'],
@@ -308,6 +339,9 @@ combined_history = {
     'val_loss':     history_phase1.history['val_loss']     + history_phase2.history['val_loss'],
 }
 
+# =============================================================================
+# EVALUATION
+# =============================================================================
 
 print("\nEvaluating model on all splits...")
 model = tf.keras.models.load_model(MODEL_SAVE_PATH)
@@ -321,6 +355,9 @@ for generator, name in [(train_generator, "Training"),
     results[name] = {'accuracy': accuracy, 'loss': loss}
     print(f"  {name:12} → Accuracy: {accuracy:.4f} | Loss: {loss:.4f}")
 
+# =============================================================================
+# DETAILED METRICS
+# =============================================================================
 
 test_generator.reset()
 predictions     = model.predict(test_generator, verbose=0)
@@ -342,6 +379,9 @@ print("\nClassification Report:")
 print(classification_report(true_classes, predicted_classes,
                              target_names=CLASS_NAMES, digits=4))
 
+# =============================================================================
+# VISUALIZATIONS
+# =============================================================================
 
 # Training history
 plt.figure(figsize=(15, 5))
@@ -388,6 +428,9 @@ plt.savefig(os.path.join(RESULTS_DIR, 'confusion_matrix.png'), dpi=300, bbox_inc
 plt.close()
 print("Saved: confusion_matrix.png")
 
+# =============================================================================
+# SAVE RESULTS
+# =============================================================================
 
 results_summary = {
     'Model':    'EfficientNetB0 (Transfer Learning)',
@@ -399,6 +442,9 @@ pd.DataFrame([results_summary]).to_csv(
     os.path.join(RESULTS_DIR, 'model_results.csv'), index=False)
 print("Saved: model_results.csv")
 
+# =============================================================================
+# CLEANUP
+# =============================================================================
 
 try:
     shutil.rmtree(os.path.dirname(TRAIN_DIR))
@@ -406,6 +452,9 @@ try:
 except:
     pass
 
+# =============================================================================
+# FINAL SUMMARY
+# =============================================================================
 
 print("\n" + "="*60)
 print("TRAINING COMPLETE!")
